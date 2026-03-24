@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu d'Échecs Multiplayer en Ligne</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- En-tête -->
+        <header>
+            <h1>♟ Jeu d'Échecs Multiplayer ♟</h1>
+            <p class="subtitle">Affrontez d'autres joueurs en temps réel</p>
+        </header>
+
+        <!-- Écran de pseudo -->
+        <main id="pseudoScreen" class="screen active">
+            <section>
+                <div class="matching-card">
+                    <h2>Bienvenue</h2>
+                    <p>Entrez votre pseudo pour commencer</p>
+                    <div class="form-group">
+                        <input type="text" id="pseudoInput" placeholder="Votre pseudo" maxlength="20" class="pseudo-input">
+                        <button class="btn btn-primary btn-large" id="startBtn">Commencer</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Écran de matching -->
+        <main id="matchingScreen" class="screen">
+            <section class="matching-section">
+                <div class="matching-card">
+                    <h2>Jeu d'Échecs Multijoueur</h2>
+                    <p>Choisissez un mode de jeu</p>
+                    <div class="button-group">
+                        <button class="btn btn-local btn-large" id="localGameBtn">
+                            👥 Mode Local (2 joueurs)
+                        </button>
+                        <button class="btn btn-multiplayer btn-large" id="findGameBtn">
+                            🌐 En Ligne
+                        </button>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h3>Comment jouer :</h3>
+                    <ul>
+                        <li><strong>Mode Local :</strong> Jouez contre un ami sur le même ordinateur</li>
+                        <li><strong>Mode Multijoueur :</strong> Cherchez un adversaire en ligne</li>
+                        <li>Les blancs commencent toujours la partie</li>
+                        <li>Sélectionnez une pièce, puis une case de destination</li>
+                        <li>Battez votre adversaire en le mettant en échec et mat !</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <!-- Écran des options en ligne -->
+        <main id="onlineScreen" class="screen">
+            <section class="matching-section">
+                <div class="matching-card">
+                    <h2>Jeu En Ligne</h2>
+                    <p>Choisissez une option</p>
+                    <div class="button-group">
+                        <button class="btn btn-multiplayer btn-large" id="randomOpponentBtn">
+                            🎲 Adversaire Aléatoire
+                        </button>
+                        <button class="btn btn-private btn-large" id="privateRoomBtn">
+                            🔐 Salon Privé
+                        </button>
+                        <button class="btn btn-secondary btn-large" id="backToMatchingBtn">
+                            ← Retour au menu
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Écran d'attente -->
+        <main id="waitingScreen" class="screen">
+            <section class="waiting-section">
+                <div class="spinner"></div>
+                <h2>En attente d'un adversaire...</h2>
+                <p id="waitingStatus">Recherche en cours...</p>
+                <button class="btn btn-secondary" id="cancelWaitBtn">Annuler</button>
+            </section>
+        </main>
+
+        <!-- Écran Salon Privé -->
+        <main id="privateRoomScreen" class="screen">
+            <section class="private-room-section">
+                <div class="private-room-card">
+                    <h2>Salon Privé</h2>
+                    <div class="room-options">
+                        <div class="room-option">
+                            <h3>Créer un salon</h3>
+                            <button class="btn btn-primary" id="createRoomBtn">Créer</button>
+                            <div id="createdRoomInfo" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 2px solid #ecf0f1;">
+                                <p>Code du salon:</p>
+                                <div class="room-code-display" id="roomCodeDisplay"></div>
+                                <button class="btn btn-secondary btn-small" id="copyCodeBtn">Copier</button>
+                                <p id="waitingForPlayer" style="margin-top: 15px; color: #666; font-style: italic;">En attente d'un adversaire...</p>
+                            </div>
+                        </div>
+                        <div class="room-divider">OU</div>
+                        <div class="room-option">
+                            <h3>Rejoindre un salon</h3>
+                            <input type="text" id="roomCodeInput" placeholder="Entrez le code du salon" maxlength="6" class="room-code-input">
+                            <button class="btn btn-primary" id="joinRoomBtn">Rejoindre</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" id="backToMenuBtn">Retour au menu</button>
+                </div>
+            </section>
+        </main>
+            </section>
+        </main>
+
+        <!-- Écran de jeu -->
+        <main id="gameScreen" class="screen">
+            <div class="game-wrapper">
+                
+                <!-- Échiquier -->
+                <section class="board-section">
+                    <div class="info-bar">
+                        <span class="player-turn" id="playerTurn">Au trait : Blancs</span>
+                    </div>
+                    <!-- Pseudo du joueur noir (en haut) -->
+                    <div class="opponent-info" id="opponentInfoTop">
+                        <div class="player-name-large" id="opponentName">Adversaire</div>
+                        <span class="player-elo-inline" id="opponentELO">(1200)</span>
+                    </div>
+                    <div class="board" id="board"></div>
+                    <!-- Pseudo du joueur blanc (en bas) -->
+                    <div class="player-info-bottom" id="playerInfoBottom">
+                        <div class="player-name-large" id="playerName">Vous</div>
+                        <span class="player-elo-inline" id="playerELO">(1200)</span>
+                    </div>
+                    <div class="controls">
+                        <button class="btn btn-secondary" id="resignBtn">🏳️ Abandonner</button>
+                        <button class="btn btn-secondary" id="drawBtn">🤝 Proposition d'égalité</button>
+                    </div>                    
+                </section>                
+
+                <!-- Panneau latéral -->
+                <aside class="sidebar">
+                    <div class="player-info-sidebar">
+                        <div class="player-card black-timer" id="blackTimerCard">
+                            <div class="timer-container">
+                                <div class="hourglass" id="blackHourglass">⏳</div>
+                                <div class="player-timer" id="blackTimer">10:00</div>
+                            </div>
+                        </div>
+                        <div class="player-card white-timer" id="whiteTimerCard">
+                            <div class="timer-container">
+                                <div class="hourglass" id="whiteHourglass">⏳</div>
+                                <div class="player-timer" id="whiteTimer">10:00</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="history-panel">
+                        <h3>Historique des coups</h3>
+                        <div class="moves-history" id="movesHistory">
+                            <p class="empty-history">Aucun coup joué</p>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </main>
+
+        <!-- Écran de fin de partie -->
+        <main id="gameEndScreen" class="screen">
+            <section class="game-end-section">
+                <div class="game-end-card">
+                    <h2 id="gameEndTitle">Partie Terminée</h2>
+                    <p id="gameEndMessage">Résultat de la partie</p>
+                    <div class="button-group">
+                        <button class="btn btn-primary btn-large" id="playAgainBtn">
+                            ♻️ Rejouer
+                        </button>
+                        <button class="btn btn-secondary btn-large" id="backToHomeBtn">
+                            🏠 Accueil
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Notifications -->
+        <div id="notification" class="notification"></div>
+
+        <!-- Modal de confirmation personnalisée -->
+        <div id="confirmModal" class="modal">
+            <div class="modal-content">
+                <p id="confirmMessage"></p>
+                <div class="modal-buttons">
+                    <button class="btn btn-secondary" id="confirmYes">Oui</button>
+                    <button class="btn btn-primary" id="confirmNo">Annuler</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.io client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
