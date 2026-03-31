@@ -3,6 +3,10 @@
    =========================== */
 
 :root {
+    --app-bg-start: #667eea;
+    --app-bg-end: #764ba2;
+    --app-bg-solid: #667eea;
+    --app-bg-gradient: linear-gradient(135deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
     --primary-color: #2c3e50;
     --secondary-color: #3498db;
     --success-color: #27ae60;
@@ -15,6 +19,10 @@
     --possible-move-color: #7fc97f;
     --border-radius: 8px;
     --transition: all 0.3s ease;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -25,17 +33,45 @@
 
 html, body {
     height: 100%;
+    background-color: var(--app-bg-solid);
+    background-image: var(--app-bg-gradient);
 }
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-color: var(--app-bg-solid);
+    background-image: var(--app-bg-gradient);
     color: var(--dark-color);
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    position: relative;
+    padding: calc(20px + var(--safe-top)) calc(20px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(20px + var(--safe-left));
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--app-bg-solid);
+    background-image: var(--app-bg-gradient);
+}
+
+/* iOS renders system areas from background-color, not gradient images. */
+@supports (-webkit-touch-callout: none) {
+    html,
+    body {
+        background-color: var(--app-bg-solid) !important;
+        background-image: none !important;
+    }
+
+    body::before {
+        background-color: var(--app-bg-solid);
+        background-image: none;
+    }
 }
 
 /* ===========================
@@ -113,6 +149,9 @@ main {
     text-align: center;
     padding: 40px 50px;
     min-width: 380px;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
 }
 
 .matching-card h2 {
@@ -279,6 +318,7 @@ main {
     border-radius: var(--border-radius);
     padding: 40px;
     max-width: 600px;
+    width: 100%;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
@@ -592,8 +632,8 @@ main {
     overflow: hidden;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
     aspect-ratio: 1;
-    width: 450px;
-    height: 450px;
+    width: min(450px, 100%);
+    height: auto;
 }
 
 .square {
@@ -659,6 +699,10 @@ main {
     gap: 10px;
     justify-content: center;
     flex-wrap: wrap;
+}
+
+.mobile-inline-history {
+    display: none;
 }
 
 .btn {
@@ -1117,83 +1161,296 @@ main {
    =========================== */
 
 @media (max-width: 1024px) {
+    body {
+        align-items: flex-start;
+    }
+
+    .container {
+        padding: 0 12px;
+    }
+
     .game-wrapper {
         grid-template-columns: 1fr;
-        gap: 20px;
+        grid-template-rows: auto;
+        gap: 16px;
     }
 
     .player-info {
         display: none;
     }
 
-    .player-info-sidebar {
-        display: block;
-    }
-
     .sidebar {
+        display: flex;
         width: 100%;
-        flex-direction: row;
-        gap: 20px;
+        flex-direction: column;
+        gap: 12px;
     }
 
     .player-info-sidebar {
-        width: auto;
-        display: flex;
-        gap: 20px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
     }
 
     .player-card {
         margin-bottom: 0;
+        min-height: 68px;
+        grid-column: auto;
+        grid-row: auto;
     }
 
     .history-panel {
-        flex: 1;
+        width: 100%;
         min-height: 200px;
+        grid-column: auto;
+        grid-row: auto;
+        margin-bottom: 0;
+    }
+
+    .chat-panel {
+        width: 100%;
+        grid-column: auto;
+        grid-row: auto;
     }
 }
 
 @media (max-width: 768px) {
+    body {
+        padding: calc(12px + var(--safe-top)) calc(12px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left));
+    }
+
     header h1 {
         font-size: 2rem;
     }
 
     main {
         padding: 20px;
+        overflow-x: visible;
     }
 
     .matching-section {
         grid-template-columns: 1fr;
         gap: 20px;
+        width: 100%;
     }
 
-    .sidebar {
-        flex-direction: column;
+    .matching-section .info-box {
+        display: none;
     }
 
+    .matching-card {
+        min-width: 0;
+        padding: 28px 20px;
+    }
+
+    .private-room-section {
+        min-height: auto;
+    }
+
+    .private-room-card {
+        padding: 24px 18px;
+    }
+
+    .room-options {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .room-divider {
+        display: none;
+    }
+
+    .game-wrapper {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px 10px;
+        align-items: start;
+        width: 100%;
+    }
+
+    .board-section,
+    .sidebar,
     .player-info-sidebar {
-        flex-direction: column;
+        display: contents;
+    }
+
+    .info-bar {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        margin-bottom: 0;
+    }
+
+    .opponent-info {
+        grid-column: 1;
+        grid-row: 2;
+        justify-self: start;
+        padding: 0;
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    #blackTimerCard {
+        grid-column: 2;
+        grid-row: 2;
+        justify-self: end;
     }
 
     .board {
-        max-width: 100%;
+        grid-column: 1 / -1;
+        grid-row: 3;
     }
 
-    .square {
-        font-size: 1.8rem;
+    .player-info-bottom {
+        grid-column: 1;
+        grid-row: 4;
+        justify-self: start;
+        padding: 0;
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    #whiteTimerCard {
+        grid-column: 2;
+        grid-row: 4;
+        justify-self: end;
     }
 
     .controls {
-        flex-direction: column;
+        grid-column: 1 / -1;
+        grid-row: 5;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 8px;
+        width: 100%;
     }
 
-    .btn {
+    .controls .btn {
+        flex: 1 1 0;
+        min-width: 0;
+        font-size: 0.78rem;
+        padding: 8px 8px;
+    }
+
+    .history-panel {
+        grid-column: 1 / -1;
+        grid-row: 6;
+        margin-top: 6px;
+        display: none;
+    }
+
+    .chat-panel {
+        grid-column: 1 / -1;
+        grid-row: 7;
+    }
+
+    .player-card {
+        min-height: auto;
+        padding: 6px 8px;
+        border-width: 2px;
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .timer-container {
+        gap: 4px;
+    }
+
+    .hourglass {
+        font-size: 0.95rem;
+    }
+
+    .player-timer {
+        font-size: 1rem;
+        letter-spacing: 0;
+    }
+
+    .board {
+        width: min(100%, 480px);
+        max-width: 100%;
+        justify-self: center;
+    }
+
+    .square {
+        font-size: clamp(1.5rem, 5.2vw, 2rem);
+    }
+
+    .controls .btn,
+    .button-group .btn,
+    .chat-input-row .btn {
         width: 100%;
+    }
+
+    .controls .btn {
+        width: auto;
+    }
+
+    .mobile-inline-history {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 4px;
+        overscroll-behavior-x: contain;
+        padding: 4px 0 2px;
+    }
+
+    .mobile-inline-history .empty-history {
+        padding: 0;
+        text-align: left;
+        font-size: 0.75rem;
+        color: #777;
+    }
+
+    .inline-move-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px 7px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        line-height: 1;
+        border: 1px solid transparent;
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+    }
+
+    .inline-move-number {
+        font-weight: 700;
+        opacity: 0.75;
+    }
+
+    .inline-move-chip.white-move {
+        color: #8b6f47;
+        background: linear-gradient(135deg, rgba(240, 217, 181, 0.9) 0%, rgba(232, 200, 155, 0.9) 100%);
+        border-color: #d4a574;
+    }
+
+    .inline-move-chip.black-move {
+        color: #f0f0f0;
+        background: linear-gradient(135deg, rgba(35, 35, 35, 0.95) 0%, rgba(70, 70, 70, 0.95) 100%);
+        border-color: #111;
+    }
+
+    .button-group .btn-large {
+        padding: 12px 18px;
+        font-size: 0.95rem;
+        line-height: 1.2;
+    }
+
+    .chat-messages,
+    .moves-history {
+        max-height: 220px;
     }
 }
 
 @media (max-width: 480px) {
     body {
-        padding: 10px;
+        padding: calc(8px + var(--safe-top)) calc(8px + var(--safe-right)) calc(8px + var(--safe-bottom)) calc(8px + var(--safe-left));
     }
 
     header h1 {
@@ -1205,21 +1462,88 @@ main {
     }
 
     main {
-        padding: 15px;
+        padding: 14px;
+    }
+
+    .matching-card {
+        padding: 20px 14px;
+    }
+
+    .button-group .btn-large {
+        padding: 10px 14px;
+        font-size: 0.86rem;
     }
 
     .square {
-        font-size: 1.3rem;
+        font-size: clamp(1.2rem, 7.2vw, 1.55rem);
+    }
+
+    .board {
+        width: min(100%, 430px);
     }
 
     .info-bar {
         font-size: 1rem;
+        width: 100%;
     }
 
     .notification {
         right: 10px;
         left: 10px;
         max-width: none;
+    }
+
+    .player-name-large {
+        font-size: 16px;
+    }
+
+    .player-elo-inline {
+        font-size: 12px;
+    }
+
+    .game-wrapper {
+        gap: 8px 8px;
+    }
+
+    .opponent-info,
+    .player-info-bottom {
+        gap: 4px;
+    }
+
+    .player-name-large {
+        font-size: 14px;
+    }
+
+    .player-elo-inline {
+        font-size: 11px;
+    }
+
+    .player-card {
+        padding: 4px 6px;
+        border-width: 1px;
+        border-radius: 8px;
+    }
+
+    .hourglass {
+        font-size: 0.82rem;
+    }
+
+    .player-timer {
+        font-size: 0.9rem;
+    }
+
+    .controls .btn {
+        font-size: 0.7rem;
+        padding: 7px 6px;
+    }
+
+    .inline-move-chip {
+        font-size: 0.66rem;
+        padding: 3px 6px;
+    }
+
+    .chat-input-row {
+        flex-direction: column;
     }
 }
 

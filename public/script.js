@@ -606,13 +606,48 @@ function updateTimerClasses() {
  */
 function updateMoveHistory() {
     const historyContainer = document.getElementById('movesHistory');
+    const opponentInlineContainer = document.getElementById('opponentMovesInline');
+    const playerInlineContainer = document.getElementById('playerMovesInline');
+
+    const renderInlineEmpty = () => {
+        if (opponentInlineContainer) {
+            opponentInlineContainer.innerHTML = '<p class="empty-history">Aucun coup</p>';
+        }
+        if (playerInlineContainer) {
+            playerInlineContainer.innerHTML = '<p class="empty-history">Aucun coup</p>';
+        }
+    };
 
     if (gameState.history.length === 0) {
-        historyContainer.innerHTML = '<p class="empty-history">Aucun coup joué</p>';
+        if (historyContainer) {
+            historyContainer.innerHTML = '<p class="empty-history">Aucun coup joué</p>';
+        }
+        renderInlineEmpty();
         return;
     }
 
-    historyContainer.innerHTML = '';
+    if (historyContainer) {
+        historyContainer.innerHTML = '';
+    }
+
+    if (opponentInlineContainer) {
+        opponentInlineContainer.innerHTML = '';
+    }
+    if (playerInlineContainer) {
+        playerInlineContainer.innerHTML = '';
+    }
+
+    const myColor = gameState.isLocalGame ? 'white' : (gameState.color || 'white');
+
+    const addInlineMove = (moveHtml, moveNumber, moveColor) => {
+        const targetContainer = moveColor === myColor ? playerInlineContainer : opponentInlineContainer;
+        if (!targetContainer) return;
+
+        const chip = document.createElement('span');
+        chip.className = `inline-move-chip ${moveColor}-move`;
+        chip.innerHTML = `<span class="inline-move-number">${moveNumber}.</span> ${moveHtml}`;
+        targetContainer.appendChild(chip);
+    };
 
     // Grouper les coups par tour (blanc + noir)
     for (let i = 0; i < gameState.history.length; i += 2) {
@@ -641,10 +676,26 @@ function updateMoveHistory() {
         }
         
         moveItem.innerHTML = html;
-        historyContainer.appendChild(moveItem);
+        if (historyContainer) {
+            historyContainer.appendChild(moveItem);
+        }
+
+        addInlineMove(whiteMove, moveNumber, 'white');
+        if (blackMove) {
+            addInlineMove(blackMove, moveNumber, 'black');
+        }
     }
 
-    historyContainer.scrollTop = historyContainer.scrollHeight;
+    if (historyContainer) {
+        historyContainer.scrollTop = historyContainer.scrollHeight;
+    }
+
+    if (opponentInlineContainer) {
+        opponentInlineContainer.scrollLeft = opponentInlineContainer.scrollWidth;
+    }
+    if (playerInlineContainer) {
+        playerInlineContainer.scrollLeft = playerInlineContainer.scrollWidth;
+    }
 }
 
 // ===========================

@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#667eea">
     <title>Jeu d'Échecs Multijoueur en Ligne</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -135,12 +136,18 @@
                     <div class="opponent-info" id="opponentInfoTop">
                         <div class="player-name-large" id="opponentName">Adversaire</div>
                         <span class="player-elo-inline" id="opponentELO">(1200)</span>
+                        <div class="mobile-inline-history" id="opponentMovesInline">
+                            <p class="empty-history">Aucun coup</p>
+                        </div>
                     </div>
                     <div class="board" id="board"></div>
                     <!-- Pseudo du joueur blanc (en bas) -->
                     <div class="player-info-bottom" id="playerInfoBottom">
                         <div class="player-name-large" id="playerName">Vous</div>
                         <span class="player-elo-inline" id="playerELO">(1200)</span>
+                        <div class="mobile-inline-history" id="playerMovesInline">
+                            <p class="empty-history">Aucun coup</p>
+                        </div>
                     </div>
                     <div class="controls">
                         <button class="btn btn-secondary" id="resignBtn">🏳️ Abandonner</button>
