@@ -4,6 +4,7 @@
 
 // Établit la connexion avec le serveur
 const socket = io();
+const PSEUDO_STORAGE_KEY = 'chessPlayerPseudo';
 
 // ===========================
 // GESTION DES SONS
@@ -154,6 +155,36 @@ function showNotification(message, type = 'info') {
     }, 4000);
 }
 
+function savePseudoToCache(pseudo) {
+    try {
+        localStorage.setItem(PSEUDO_STORAGE_KEY, pseudo);
+    } catch (error) {
+        console.log('Impossible de sauvegarder le pseudo en cache:', error);
+    }
+}
+
+function getPseudoFromCache() {
+    try {
+        return localStorage.getItem(PSEUDO_STORAGE_KEY) || '';
+    } catch (error) {
+        console.log('Impossible de lire le pseudo en cache:', error);
+        return '';
+    }
+}
+
+function updateMenuPseudoDisplay(pseudo) {
+    const row = document.getElementById('menuPseudoRow');
+    const text = document.getElementById('menuPseudoText');
+    if (!row || !text) return;
+
+    if (pseudo && pseudo.trim()) {
+        text.textContent = `Pseudo: ${pseudo}`;
+        row.style.display = 'flex';
+    } else {
+        row.style.display = 'none';
+    }
+}
+
 // ===========================
 // ÉVÉNEMENTS SOCKET.IO - CONNEXION
 // ===========================
@@ -215,6 +246,7 @@ socket.on('gameStart', (data) => {
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
     gameState.history = [];
+    resetChatMessages();
 
     // Met à jour l'affichage des noms et ELO
     updatePlayerDisplay();
@@ -256,6 +288,8 @@ socket.on('moveUpdate', (data) => {
     // Synchronise en passant et droits de roque depuis le serveur
     if (data.enPassantTarget !== undefined) gameState.enPassantTarget = data.enPassantTarget;
     if (data.castlingRights !== undefined) gameState.castlingRights = data.castlingRights;
+    // Notification de promotion
+    if (data.promotion) showNotification('Promotion ! Le pion devient une Dame.', 'success');
 
     // Joue le son du coup de l'adversaire
     if (data.moveNotation.includes('x')) {
@@ -364,6 +398,7 @@ socket.on('privateGameStart', (data) => {
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
     gameState.history = [];
+    resetChatMessages();
 
     // Met à jour l'affichage des noms et ELO
     updatePlayerDisplay();
@@ -406,6 +441,7 @@ socket.on('privateRematchStart', (data) => {
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
     gameState.history = [];
+    resetChatMessages();
 
     // Met à jour l'affichage des noms et ELO
     updatePlayerDisplay();
@@ -1212,6 +1248,73 @@ function endGameByTime(loser) {
     showScreen('gameEndScreen');
 }
 
+
+// ===========================
+// CHAT
+// ===========================
+
+socket.on('chatMessage', (data) => {
+    const isMine = data.socketId === socket.id;
+    const isSystem = data.socketId === null || data.pseudo === 'Système';
+    appendChatMessage(data.pseudo, data.message, isMine, isSystem);
+});
+
+function appendChatMessage(pseudo, message, isMine, isSystem = false) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+
+    const empty = container.querySelector('.empty-history');
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    let messageTypeClass = isMine ? 'mine' : 'theirs';
+    if (isSystem) messageTypeClass = 'system';
+    div.className = 'chat-message ' + messageTypeClass;
+
+    const author = document.createElement('span');
+    author.className = 'chat-author';
+    
+    const authorName = document.createElement('span');
+    authorName.textContent = isSystem ? 'Info partie' : pseudo;
+    author.appendChild(authorName);
+    
+    const time = document.createElement('span');
+    time.style.fontSize = '0.7rem';
+    time.style.opacity = '0.75';
+    time.style.fontWeight = '400';
+    const now = new Date();
+    time.textContent = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    author.appendChild(time);
+
+    const text = document.createElement('span');
+    text.style.display = 'block';
+    text.textContent = message;
+
+    div.appendChild(author);
+    div.appendChild(text);
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function resetChatMessages() {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    container.innerHTML = '<p class="empty-history">Aucun message</p>';
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    if (!input) return;
+    const message = input.value.trim();
+    if (!message) return;
+    if (gameState.isLocalGame) {
+        showNotification('Le chat est uniquement disponible en ligne', 'info');
+        return;
+    }
+    socket.emit('chatMessage', { message });
+    input.value = '';
+}
+
 // ===========================
 // BOUTONS D'ACTION
 // ===========================
@@ -1234,8 +1337,24 @@ document.getElementById('startBtn').addEventListener('click', () => {
     }
     
     gameState.playerPseudo = pseudo;
+    savePseudoToCache(pseudo);
+    updateMenuPseudoDisplay(pseudo);
     socket.emit('setPseudo', { pseudo });
     showScreen('matchingScreen');
+});
+
+document.getElementById('editPseudoBtn').addEventListener('click', () => {
+    const pseudoInput = document.getElementById('pseudoInput');
+    const pseudoTitle = document.getElementById('pseudoScreenTitle');
+    const pseudoSubtitle = document.getElementById('pseudoScreenSubtitle');
+    const currentPseudo = getPseudoFromCache();
+
+    if (pseudoInput) pseudoInput.value = currentPseudo;
+    if (pseudoTitle) pseudoTitle.textContent = 'Modifier votre pseudo';
+    if (pseudoSubtitle) pseudoSubtitle.textContent = 'Changez votre pseudo puis cliquez sur Commencer';
+
+    showScreen('pseudoScreen');
+    if (pseudoInput) pseudoInput.focus();
 });
 
 /**
@@ -1390,7 +1509,20 @@ document.getElementById('backToHomeBtn').addEventListener('click', () => {
     gameState.opponentPseudo = 'Adversaire';
     gameState.enPassantTarget = null;
     gameState.castlingRights = { white: { kingSide: true, queenSide: true }, black: { kingSide: true, queenSide: true } };
+    resetChatMessages();
     showScreen('matchingScreen');
+});
+
+
+/**
+ * Bouton : Envoyer message chat
+ */
+document.getElementById('chatSendBtn').addEventListener('click', () => {
+    sendChatMessage();
+});
+
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendChatMessage();
 });
 
 // ===========================
@@ -1416,4 +1548,22 @@ function initializeDisplay() {
 document.addEventListener('DOMContentLoaded', () => {
     // Le pseudoScreen est déjà actif par défaut dans le HTML
     console.log('Jeu d\'échecs multiplayer chargé - Écran de pseudo affichéé');
+
+    const pseudoInput = document.getElementById('pseudoInput');
+    const pseudoTitle = document.getElementById('pseudoScreenTitle');
+    const pseudoSubtitle = document.getElementById('pseudoScreenSubtitle');
+    if (pseudoInput) {
+        const cachedPseudo = getPseudoFromCache();
+        if (cachedPseudo) {
+            pseudoInput.value = cachedPseudo;
+            gameState.playerPseudo = cachedPseudo;
+            updateMenuPseudoDisplay(cachedPseudo);
+            socket.emit('setPseudo', { pseudo: cachedPseudo });
+            showScreen('matchingScreen');
+        } else {
+            if (pseudoTitle) pseudoTitle.textContent = 'Bienvenue';
+            if (pseudoSubtitle) pseudoSubtitle.textContent = 'Entrez votre pseudo pour commencer';
+            updateMenuPseudoDisplay('');
+        }
+    }
 });
