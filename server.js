@@ -138,7 +138,12 @@ function createGame(player1SocketId, player2SocketId) {
             black: 600
         },
         timerInterval: null,
-        lastMoveTime: Date.now()
+        lastMoveTime: Date.now(),
+        enPassantTarget: null,   // { row, col } de la case en passant disponible
+        castlingRights: {        // droits de roque
+            white: { kingSide: true, queenSide: true },
+            black: { kingSide: true, queenSide: true }
+        }
     };
 
     games.set(gameId, game);
@@ -181,13 +186,13 @@ function isPieceSameColor(piece1, piece2) {
 /**
  * Obtient tous les coups valides pour une pièce
  */
-function getValidMoves(board, row, col, piece) {
+function getValidMoves(board, row, col, piece, gameCtx) {
     let moves = [];
     const pieceLower = piece.toLowerCase();
 
     switch (pieceLower) {
         case 'p':
-            moves = getPawnMoves(board, row, col, piece);
+            moves = getPawnMoves(board, row, col, piece, gameCtx);
             break;
         case 'n':
             moves = getKnightMoves(board, row, col, piece);
@@ -202,7 +207,7 @@ function getValidMoves(board, row, col, piece) {
             moves = getQueenMoves(board, row, col, piece);
             break;
         case 'k':
-            moves = getKingMoves(board, row, col, piece);
+            moves = getKingMoves(board, row, col, piece, gameCtx);
             break;
     }
 
@@ -212,7 +217,7 @@ function getValidMoves(board, row, col, piece) {
 /**
  * Coups du pion
  */
-function getPawnMoves(board, row, col, piece) {
+function getPawnMoves(board, row, col, piece, gameCtx) {
     const moves = [];
     const isWhite = piece === piece.toUpperCase();
     const direction = isWhite ? -1 : 1;
@@ -221,7 +226,6 @@ function getPawnMoves(board, row, col, piece) {
     const nextRow = row + direction;
     if (isValidPosition(nextRow, col) && !board[nextRow][col]) {
         moves.push({ row: nextRow, col });
-
         if (row === startRow) {
             const twoRowsAhead = row + 2 * direction;
             if (!board[twoRowsAhead][col]) {
@@ -237,6 +241,12 @@ function getPawnMoves(board, row, col, piece) {
             const targetPiece = board[captureRow][captureCol];
             if (targetPiece && !isPieceSameColor(piece, targetPiece)) {
                 moves.push({ row: captureRow, col: captureCol });
+            }
+            // Prise en passant
+            if (gameCtx && gameCtx.enPassantTarget &&
+                gameCtx.enPassantTarget.row === captureRow &&
+                gameCtx.enPassantTarget.col === captureCol) {
+                moves.push({ row: captureRow, col: captureCol, enPassant: true });
             }
         }
     }
@@ -318,7 +328,7 @@ function getQueenMoves(board, row, col, piece) {
 /**
  * Coups du roi
  */
-function getKingMoves(board, row, col, piece) {
+function getKingMoves(board, row, col, piece, gameCtx) {
     const moves = [];
     const directions = [
         [-1, -1], [-1, 0], [-1, 1],
@@ -329,11 +339,33 @@ function getKingMoves(board, row, col, piece) {
     for (const [dRow, dCol] of directions) {
         const newRow = row + dRow;
         const newCol = col + dCol;
-
         if (isValidPosition(newRow, newCol)) {
             const targetPiece = board[newRow][newCol];
             if (!targetPiece || !isPieceSameColor(piece, targetPiece)) {
                 moves.push({ row: newRow, col: newCol });
+            }
+        }
+    }
+
+    // Roque
+    if (gameCtx) {
+        const isWhite = piece === piece.toUpperCase();
+        const color = isWhite ? 'white' : 'black';
+        const rights = gameCtx.castlingRights[color];
+        const kingRow = isWhite ? 7 : 0;
+
+        if (row === kingRow && col === 4) {
+            // Petit roque (côté roi)
+            if (rights.kingSide &&
+                !board[kingRow][5] && !board[kingRow][6] &&
+                board[kingRow][7] === (isWhite ? 'R' : 'r')) {
+                moves.push({ row: kingRow, col: 6, castling: 'kingSide' });
+            }
+            // Grand roque (côté dame)
+            if (rights.queenSide &&
+                !board[kingRow][3] && !board[kingRow][2] && !board[kingRow][1] &&
+                board[kingRow][0] === (isWhite ? 'R' : 'r')) {
+                moves.push({ row: kingRow, col: 2, castling: 'queenSide' });
             }
         }
     }
@@ -368,21 +400,14 @@ function addSlidingMoves(board, row, col, piece, dRow, dCol, moves) {
 /**
  * Valide un coup
  */
-function isValidMove(board, fromRow, fromCol, toRow, toCol, currentPlayer) {
+function isValidMove(board, fromRow, fromCol, toRow, toCol, currentPlayer, gameCtx) {
     const piece = board[fromRow][fromCol];
-
     if (!piece) return false;
-
-    // Vérifie que c'est une pièce du joueur actuel
     const isWhitePiece = piece === piece.toUpperCase();
     if ((currentPlayer === 'white' && !isWhitePiece) || (currentPlayer === 'black' && isWhitePiece)) {
         return false;
     }
-
-    // Obtient les coups valides
-    const validMoves = getValidMoves(board, fromRow, fromCol, piece);
-
-    // Vérifie si le coup de destination est dans les coups valides
+    const validMoves = getValidMoves(board, fromRow, fromCol, piece, gameCtx);
     return validMoves.some(move => move.row === toRow && move.col === toCol);
 }
 
@@ -515,7 +540,7 @@ io.on('connection', (socket) => {
         const { fromRow, fromCol, toRow, toCol } = data;
 
         // Valide le coup côté serveur
-        if (!isValidMove(game.board, fromRow, fromCol, toRow, toCol, game.currentPlayer)) {
+        if (!isValidMove(game.board, fromRow, fromCol, toRow, toCol, game.currentPlayer, game)) {
             socket.emit('invalidMove', { message: 'Coup illégal' });
             console.log(`[invalidMove] ${socket.id} a tenté un coup illégal`);
             return;
@@ -523,10 +548,54 @@ io.on('connection', (socket) => {
 
         // Exécute le coup
         const piece = game.board[fromRow][fromCol];
-        const capturedPiece = game.board[toRow][toCol];
+        let capturedPiece = game.board[toRow][toCol];
+        const isWhitePiece = piece === piece.toUpperCase();
+
+        // Prise en passant
+        const validMovesForExec = getValidMoves(game.board, fromRow, fromCol, piece, game);
+        const moveInfo = validMovesForExec.find(m => m.row === toRow && m.col === toCol);
+        if (moveInfo && moveInfo.enPassant) {
+            const direction = isWhitePiece ? 1 : -1;
+            capturedPiece = game.board[toRow + direction][toCol];
+            game.board[toRow + direction][toCol] = null;
+        }
+
+        // Roque : déplace aussi la tour
+        if (moveInfo && moveInfo.castling) {
+            const kingRow = isWhitePiece ? 7 : 0;
+            if (moveInfo.castling === 'kingSide') {
+                game.board[kingRow][5] = game.board[kingRow][7];
+                game.board[kingRow][7] = null;
+            } else {
+                game.board[kingRow][3] = game.board[kingRow][0];
+                game.board[kingRow][0] = null;
+            }
+        }
 
         game.board[toRow][toCol] = piece;
         game.board[fromRow][fromCol] = null;
+
+        // Promotion du pion (auto-dame)
+        if ((piece === 'P' && toRow === 0) || (piece === 'p' && toRow === 7)) {
+            game.board[toRow][toCol] = isWhitePiece ? 'Q' : 'q';
+        }
+
+        // Mise à jour de la cible en passant
+        if (piece.toLowerCase() === 'p' && Math.abs(toRow - fromRow) === 2) {
+            const epRow = isWhitePiece ? toRow + 1 : toRow - 1;
+            game.enPassantTarget = { row: epRow, col: toCol };
+        } else {
+            game.enPassantTarget = null;
+        }
+
+        // Mise à jour des droits de roque
+        const cr = game.castlingRights;
+        if (piece === 'K') { cr.white.kingSide = false; cr.white.queenSide = false; }
+        if (piece === 'k') { cr.black.kingSide = false; cr.black.queenSide = false; }
+        if (fromRow === 7 && fromCol === 7) cr.white.kingSide = false;
+        if (fromRow === 7 && fromCol === 0) cr.white.queenSide = false;
+        if (fromRow === 0 && fromCol === 7) cr.black.kingSide = false;
+        if (fromRow === 0 && fromCol === 0) cr.black.queenSide = false;
 
         // Décompte le temps écoulé depuis le dernier coup
         const now = Date.now();
@@ -572,7 +641,9 @@ io.on('connection', (socket) => {
             currentPlayer: game.currentPlayer,
             moveNotation,
             history: game.history,
-            timers: game.timers
+            timers: game.timers,
+            enPassantTarget: game.enPassantTarget,
+            castlingRights: game.castlingRights
         });
     });
 

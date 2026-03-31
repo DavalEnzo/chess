@@ -89,7 +89,12 @@ const gameState = {
     yourELO: 0, // ELO du joueur
     opponentELO: 0, // ELO de l'adversaire
     playerPseudo: null, // pseudo du joueur
-    opponentPseudo: 'Adversaire' // pseudo de l'adversaire
+    opponentPseudo: 'Adversaire', // pseudo de l'adversaire
+    enPassantTarget: null,   // { row, col } case en passant disponible
+    castlingRights: {        // droits de roque
+        white: { kingSide: true, queenSide: true },
+        black: { kingSide: true, queenSide: true }
+    }
 };
 
 /**
@@ -248,6 +253,9 @@ socket.on('moveUpdate', (data) => {
         gameTimers.white = data.timers.white;
         gameTimers.black = data.timers.black;
     }
+    // Synchronise en passant et droits de roque depuis le serveur
+    if (data.enPassantTarget !== undefined) gameState.enPassantTarget = data.enPassantTarget;
+    if (data.castlingRights !== undefined) gameState.castlingRights = data.castlingRights;
 
     // Joue le son du coup de l'adversaire
     if (data.moveNotation.includes('x')) {
@@ -729,41 +737,78 @@ function playMove(fromRow, fromCol, toRow, toCol) {
  * Joue un coup en mode local
  */
 function playLocalMove(fromRow, fromCol, toRow, toCol) {
-    // Valide le coup
     const piece = gameState.board[fromRow][fromCol];
     const validMoves = getValidMovesForDisplay(fromRow, fromCol);
+    const moveInfo = validMoves.find(m => m.row === toRow && m.col === toCol);
 
-    if (!validMoves.some(move => move.row === toRow && move.col === toCol)) {
+    if (!moveInfo) {
         showNotification('Coup illégal!', 'error');
         soundManager.playIllegal();
         return;
     }
 
-    // Exécute le coup
-    const capturedPiece = gameState.board[toRow][toCol];
+    const isWhitePiece = piece === piece.toUpperCase();
+    let capturedPiece = gameState.board[toRow][toCol];
+
+    // Prise en passant
+    if (moveInfo.enPassant) {
+        const direction = isWhitePiece ? 1 : -1;
+        capturedPiece = gameState.board[toRow + direction][toCol];
+        gameState.board[toRow + direction][toCol] = null;
+    }
+
+    // Roque : déplace aussi la tour
+    if (moveInfo.castling) {
+        const kingRow = isWhitePiece ? 7 : 0;
+        if (moveInfo.castling === 'kingSide') {
+            gameState.board[kingRow][5] = gameState.board[kingRow][7];
+            gameState.board[kingRow][7] = null;
+        } else {
+            gameState.board[kingRow][3] = gameState.board[kingRow][0];
+            gameState.board[kingRow][0] = null;
+        }
+    }
+
     gameState.board[toRow][toCol] = piece;
     gameState.board[fromRow][fromCol] = null;
 
-    // Joue le son approprié
+    // Promotion (auto-dame)
+    if ((piece === 'P' && toRow === 0) || (piece === 'p' && toRow === 7)) {
+        gameState.board[toRow][toCol] = isWhitePiece ? 'Q' : 'q';
+        showNotification('Promotion ! Le pion devient une Dame.', 'success');
+    }
+
+    // Mise à jour cible en passant
+    if (piece.toLowerCase() === 'p' && Math.abs(toRow - fromRow) === 2) {
+        const epRow = isWhitePiece ? toRow + 1 : toRow - 1;
+        gameState.enPassantTarget = { row: epRow, col: toCol };
+    } else {
+        gameState.enPassantTarget = null;
+    }
+
+    // Mise à jour droits de roque
+    const cr = gameState.castlingRights;
+    if (piece === 'K') { cr.white.kingSide = false; cr.white.queenSide = false; }
+    if (piece === 'k') { cr.black.kingSide = false; cr.black.queenSide = false; }
+    if (fromRow === 7 && fromCol === 7) cr.white.kingSide = false;
+    if (fromRow === 7 && fromCol === 0) cr.white.queenSide = false;
+    if (fromRow === 0 && fromCol === 7) cr.black.kingSide = false;
+    if (fromRow === 0 && fromCol === 0) cr.black.queenSide = false;
+
     if (capturedPiece) {
         soundManager.playCapture();
     } else {
         soundManager.playMove();
     }
 
-    // Crée la notation
     const moveNotation = createMoveNotation(fromRow, fromCol, toRow, toCol, piece, capturedPiece);
     gameState.history.push(moveNotation);
 
-    // Change le joueur
     gameState.currentPlayer = gameState.currentPlayer === 'white' ? 'black' : 'white';
-    gameState.color = gameState.currentPlayer === 'white' ? 'white' : 'black';
-
-    // Désélectionne
+    gameState.color = gameState.currentPlayer;
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
 
-    // Met à jour l'affichage
     renderBoard();
     updateGameDisplay();
 }
@@ -849,7 +894,6 @@ function getPawnMoves(row, col, piece) {
     const nextRow = row + direction;
     if (isValidPosition(nextRow, col) && !gameState.board[nextRow][col]) {
         moves.push({ row: nextRow, col });
-
         if (row === startRow) {
             const twoRowsAhead = row + 2 * direction;
             if (!gameState.board[twoRowsAhead][col]) {
@@ -865,6 +909,12 @@ function getPawnMoves(row, col, piece) {
             const targetPiece = gameState.board[captureRow][captureCol];
             if (targetPiece && !isPieceSameColor(piece, targetPiece)) {
                 moves.push({ row: captureRow, col: captureCol });
+            }
+            // Prise en passant
+            if (gameState.enPassantTarget &&
+                gameState.enPassantTarget.row === captureRow &&
+                gameState.enPassantTarget.col === captureCol) {
+                moves.push({ row: captureRow, col: captureCol, enPassant: true });
             }
         }
     }
@@ -957,12 +1007,30 @@ function getKingMoves(row, col, piece) {
     for (const [dRow, dCol] of directions) {
         const newRow = row + dRow;
         const newCol = col + dCol;
-
         if (isValidPosition(newRow, newCol)) {
             const targetPiece = gameState.board[newRow][newCol];
             if (!targetPiece || !isPieceSameColor(piece, targetPiece)) {
                 moves.push({ row: newRow, col: newCol });
             }
+        }
+    }
+
+    // Roque
+    const isWhite = piece === piece.toUpperCase();
+    const color = isWhite ? 'white' : 'black';
+    const rights = gameState.castlingRights[color];
+    const kingRow = isWhite ? 7 : 0;
+
+    if (row === kingRow && col === 4) {
+        if (rights.kingSide &&
+            !gameState.board[kingRow][5] && !gameState.board[kingRow][6] &&
+            gameState.board[kingRow][7] === (isWhite ? 'R' : 'r')) {
+            moves.push({ row: kingRow, col: 6, castling: 'kingSide' });
+        }
+        if (rights.queenSide &&
+            !gameState.board[kingRow][3] && !gameState.board[kingRow][2] && !gameState.board[kingRow][1] &&
+            gameState.board[kingRow][0] === (isWhite ? 'R' : 'r')) {
+            moves.push({ row: kingRow, col: 2, castling: 'queenSide' });
         }
     }
 
@@ -1320,6 +1388,8 @@ document.getElementById('backToHomeBtn').addEventListener('click', () => {
     gameState.yourELO = 0;
     gameState.opponentELO = 0;
     gameState.opponentPseudo = 'Adversaire';
+    gameState.enPassantTarget = null;
+    gameState.castlingRights = { white: { kingSide: true, queenSide: true }, black: { kingSide: true, queenSide: true } };
     showScreen('matchingScreen');
 });
 
