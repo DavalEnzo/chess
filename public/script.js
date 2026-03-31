@@ -1276,15 +1276,6 @@ function updateTimerDisplay() {
     whiteTimerEl.textContent = formatTime(gameTimers['white']);
     blackTimerEl.textContent = formatTime(gameTimers['black']);
     
-    // Réorganise les cartes: ma couleur en bas (order 2), adversaire en haut (order 1)
-    if (gameState.color === 'black') {
-        blackCardEl.style.order = '2';
-        whiteCardEl.style.order = '1';
-    } else {
-        whiteCardEl.style.order = '2';
-        blackCardEl.style.order = '1';
-    }
-    
     // Rend le chrono moins visible quand ce n'est pas son tour
     if (gameState.currentPlayer === 'white') {
         whiteCardEl.classList.remove('inactive-timer');
