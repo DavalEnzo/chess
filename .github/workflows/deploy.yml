@@ -1,0 +1,64 @@
+name: Deploy Chess Game
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Récupère l'IP publique du runner actuel
+      - name: Get runner IP
+        id: runner_ip
+        run: echo "ip=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+      # Ouvre temporairement le port SSH uniquement pour cette IP
+      - name: Open SSH for this runner
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            sudo ufw allow from ${{ steps.runner_ip.outputs.ip }} to any port 22 comment "github-actions-temp"
+            echo "IP ${{ steps.runner_ip.outputs.ip }} autorisée temporairement"
+
+      # Déploie le projet
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd ~/chess
+            git pull origin main
+            docker rm -f chess || true
+            docker build -t chess-game .
+            docker run -d \
+              -p 3000:3000 \
+              --name chess \
+              --restart unless-stopped \
+              chess-game
+            echo "✅ Déploiement terminé !"
+
+      # Referme immédiatement le port après le déploiement
+      - name: Close SSH for this runner
+        if: always()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            sudo ufw delete allow from ${{ steps.runner_ip.outputs.ip }} to any port 22
+            echo "IP ${{ steps.runner_ip.outputs.ip }} révoquée"
