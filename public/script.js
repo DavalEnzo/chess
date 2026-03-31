@@ -5,6 +5,7 @@
 // Établit la connexion avec le serveur
 const socket = io();
 const PSEUDO_STORAGE_KEY = 'chessPlayerPseudo';
+const MOBILE_BREAKPOINT = 768;
 
 // ===========================
 // GESTION DES SONS
@@ -48,6 +49,10 @@ const soundManager = {
     
     playTenSeconds() {
         this.play('tenseconds');
+    },
+
+    playCheck() {
+        this.play('illegal');
     },
     
     playGameStart() {
@@ -95,7 +100,8 @@ const gameState = {
     castlingRights: {        // droits de roque
         white: { kingSide: true, queenSide: true },
         black: { kingSide: true, queenSide: true }
-    }
+    },
+    isCheck: false           // true si le roi est en échec
 };
 
 /**
@@ -182,6 +188,19 @@ function updateMenuPseudoDisplay(pseudo) {
         row.style.display = 'flex';
     } else {
         row.style.display = 'none';
+    }
+}
+
+function updateResponsiveControlLabels() {
+    const drawBtn = document.getElementById('drawBtn');
+    if (!drawBtn) return;
+
+    if (window.innerWidth <= MOBILE_BREAKPOINT) {
+        drawBtn.textContent = '🤝 Égalité';
+        drawBtn.setAttribute('aria-label', "Proposition d'égalité");
+    } else {
+        drawBtn.textContent = "🤝 Proposition d'égalité";
+        drawBtn.removeAttribute('aria-label');
     }
 }
 
@@ -280,6 +299,7 @@ socket.on('moveUpdate', (data) => {
     gameState.history = data.history;
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
+    gameState.isCheck = data.isCheck || false; // Stocke le statut d'échec
     // Synchronise les timers depuis le serveur (bug 3)
     if (data.timers && !gameState.isLocalGame) {
         gameTimers.white = data.timers.white;
@@ -290,6 +310,13 @@ socket.on('moveUpdate', (data) => {
     if (data.castlingRights !== undefined) gameState.castlingRights = data.castlingRights;
     // Notification de promotion
     if (data.promotion) showNotification('Promotion ! Le pion devient une Dame.', 'success');
+    
+    // Notification d'échec
+    if (data.isCheck) {
+        const playerColor = data.currentPlayer === 'white' ? 'blancs' : 'noirs';
+        showNotification(`⚠️ Échec ! Les ${playerColor} sont en échec !`, 'warning');
+        soundManager.playCheck();
+    }
 
     // Joue le son du coup de l'adversaire
     if (data.moveNotation.includes('x')) {
@@ -560,10 +587,20 @@ function updateGameDisplay() {
     const playerTurnElement = document.getElementById('playerTurn');
     if (playerTurnElement) {
         const playerColor = gameState.currentPlayer === 'white' ? 'Blancs' : 'Noirs';
-        playerTurnElement.textContent = `Au trait : ${playerColor}`;
+        let displayText = `Au trait : ${playerColor}`;
+        if (gameState.isCheck) {
+            displayText += ' ⚠️ ÉCHEC!';
+        }
+        playerTurnElement.textContent = displayText;
         if (playerTurnElement.parentElement) {
             playerTurnElement.parentElement.classList.remove('black', 'white');
             playerTurnElement.parentElement.classList.add(gameState.currentPlayer);
+            // Ajoute une classe d'alerte si en échec
+            if (gameState.isCheck) {
+                playerTurnElement.parentElement.classList.add('check');
+            } else {
+                playerTurnElement.parentElement.classList.remove('check');
+            }
         }
     }
 
@@ -1617,4 +1654,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updateMenuPseudoDisplay('');
         }
     }
+
+    updateResponsiveControlLabels();
 });
+
+window.addEventListener('resize', updateResponsiveControlLabels);
