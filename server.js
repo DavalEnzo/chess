@@ -528,6 +528,34 @@ io.on('connection', (socket) => {
         game.board[toRow][toCol] = piece;
         game.board[fromRow][fromCol] = null;
 
+        // Décompte le temps écoulé depuis le dernier coup
+        const now = Date.now();
+        const elapsed = Math.floor((now - game.lastMoveTime) / 1000);
+        game.timers[game.currentPlayer] = Math.max(0, game.timers[game.currentPlayer] - elapsed);
+        game.lastMoveTime = now;
+
+        // Vérifie le timeout
+        if (game.timers[game.currentPlayer] <= 0) {
+            const loser = game.currentPlayer;
+            const winner = loser === 'white' ? 'black' : 'white';
+            const loserFR = loser === 'white' ? 'blancs' : 'noirs';
+            const winnerFR = winner === 'white' ? 'blancs' : 'noirs';
+            const eloWinner = getPlayerELO(game.players[winner]);
+            const eloLoser = getPlayerELO(game.players[loser]);
+            const { newEloWinner, newEloLoser } = calculateNewELO(eloWinner, eloLoser);
+            playerELO.set(game.players[winner], newEloWinner);
+            playerELO.set(game.players[loser], newEloLoser);
+            game.status = 'ended';
+            io.to(game.gameId).emit('gameEnd', {
+                status: 'timeout',
+                winner,
+                message: `Le temps des ${loserFR} s'est écoulé. Les ${winnerFR} ont gagné !`,
+                winnerELO: newEloWinner,
+                loserELO: newEloLoser
+            });
+            return;
+        }
+
         // Crée la notation
         const moveNotation = createMoveNotation(fromRow, fromCol, toRow, toCol, piece, capturedPiece);
         game.history.push(moveNotation);
@@ -538,12 +566,13 @@ io.on('connection', (socket) => {
 
         console.log(`[move] ${socket.id} (${previousPlayer}) joue : ${moveNotation}`);
 
-        // Envoie la mise à jour aux deux joueurs dans la room
+        // Envoie la mise à jour aux deux joueurs dans la room (timers inclus)
         io.to(game.gameId).emit('moveUpdate', {
             board: game.board,
             currentPlayer: game.currentPlayer,
             moveNotation,
-            history: game.history
+            history: game.history,
+            timers: game.timers
         });
     });
 
@@ -838,12 +867,12 @@ io.on('connection', (socket) => {
             console.log(`[rematchPrivateRoom] Joueurs rejoints à la nouvelle room ${newGame.gameId}`);
 
             // Récupère les ELO des joueurs
-            const elo1 = getPlayerELO(room.player1SocketId);
-            const elo2 = getPlayerELO(room.player2SocketId);
+            const elo1 = getPlayerELO(player1SocketId);
+            const elo2 = getPlayerELO(player2SocketId);
             
             // Récupère les pseudos
-            const pseudo1 = playerPseudos.get(room.player1SocketId) || 'Joueur 1';
-            const pseudo2 = playerPseudos.get(room.player2SocketId) || 'Joueur 2';
+            const pseudo1 = playerPseudos.get(player1SocketId) || 'Joueur 1';
+            const pseudo2 = playerPseudos.get(player2SocketId) || 'Joueur 2';
 
             // Notifie les deux joueurs que la nouvelle partie commence
             player1Socket.emit('privateRematchStart', {
