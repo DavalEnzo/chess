@@ -117,6 +117,34 @@ function calculateNewELO(eloWinner, eloLoser) {
 }
 
 /**
+ * Calcule les points ELO potentiellement gagnes/perdus pour un joueur
+ */
+function getPotentialELOChange(playerElo, opponentElo) {
+    const { newEloWinner } = calculateNewELO(playerElo, opponentElo);
+    const { newEloLoser } = calculateNewELO(opponentElo, playerElo);
+
+    return {
+        gain: Math.max(0, newEloWinner - playerElo),
+        loss: Math.max(0, playerElo - newEloLoser)
+    };
+}
+
+/**
+ * Envoie un message systeme de debut de partie dans le chat
+ */
+function sendGameStartInfoMessage(playerSocketId, gameId, opponentPseudo, playerElo, opponentElo) {
+    const { gain, loss } = getPotentialELOChange(playerElo, opponentElo);
+
+    io.to(playerSocketId).emit('chatMessage', {
+        pseudo: 'Système',
+        message: `Adversaire: ${opponentPseudo} (${opponentElo}) | ELO: +${gain} / -${loss}`,
+        fromSelf: false,
+        socketId: null,
+        gameId
+    });
+}
+
+/**
  * Crée une nouvelle partie
  */
 function createGame(player1SocketId, player2SocketId) {
@@ -510,6 +538,9 @@ io.on('connection', (socket) => {
                 opponentPseudo: pseudo1
             });
 
+            sendGameStartInfoMessage(player1SocketId, game.gameId, pseudo2, elo1, elo2);
+            sendGameStartInfoMessage(player2SocketId, game.gameId, pseudo1, elo2, elo1);
+
             console.log(`[gameStart] Partie créée : ${game.gameId} (${player1SocketId} vs ${player2SocketId})`);
         } else {
             // Aucun joueur en attente, ajoute ce joueur à la queue
@@ -576,8 +607,10 @@ io.on('connection', (socket) => {
         game.board[fromRow][fromCol] = null;
 
         // Promotion du pion (auto-dame)
+        let wasPromotion = false;
         if ((piece === 'P' && toRow === 0) || (piece === 'p' && toRow === 7)) {
             game.board[toRow][toCol] = isWhitePiece ? 'Q' : 'q';
+            wasPromotion = true;
         }
 
         // Mise à jour de la cible en passant
@@ -643,7 +676,8 @@ io.on('connection', (socket) => {
             history: game.history,
             timers: game.timers,
             enPassantTarget: game.enPassantTarget,
-            castlingRights: game.castlingRights
+            castlingRights: game.castlingRights,
+            promotion: wasPromotion
         });
     });
 
@@ -705,6 +739,30 @@ io.on('connection', (socket) => {
 
         // Marque la partie comme terminée
         game.status = 'ended';
+    });
+
+    /**
+     * Événement : Message de chat
+     */
+    socket.on('chatMessage', (data) => {
+        const userInfo = users.get(socket.id);
+        if (!userInfo) return;
+
+        const game = games.get(userInfo.gameId);
+        if (!game || game.status !== 'active') return;
+
+        const pseudo = playerPseudos.get(socket.id) || 'Joueur';
+        const message = String(data.message || '').trim().substring(0, 200);
+        if (!message) return;
+
+        console.log(`[chat] ${pseudo}: ${message}`);
+
+        io.to(userInfo.gameId).emit('chatMessage', {
+            pseudo,
+            message,
+            fromSelf: false,
+            socketId: socket.id
+        });
     });
 
     /**
@@ -880,6 +938,9 @@ io.on('connection', (socket) => {
                 message: 'La partie commence !'
             });
 
+            sendGameStartInfoMessage(room.player1SocketId, game.gameId, pseudo2, elo1, elo2);
+            sendGameStartInfoMessage(room.player2SocketId, game.gameId, pseudo1, elo2, elo1);
+
         } catch (error) {
             console.error('[joinPrivateRoom] Erreur:', error);
             socket.emit('privateRoomError', {
@@ -969,6 +1030,9 @@ io.on('connection', (socket) => {
                 opponentPseudo: pseudo1,
                 message: 'Nouvelle partie commencée!'
             });
+
+            sendGameStartInfoMessage(player1SocketId, newGame.gameId, pseudo2, elo1, elo2);
+            sendGameStartInfoMessage(player2SocketId, newGame.gameId, pseudo1, elo2, elo1);
 
             console.log(`[rematchPrivateRoom] Événements envoyés aux deux joueurs`);
 
