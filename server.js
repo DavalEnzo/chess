@@ -440,6 +440,108 @@ function isValidMove(board, fromRow, fromCol, toRow, toCol, currentPlayer, gameC
 }
 
 /**
+ * Vérifie si une case est attaquée par une couleur donnée
+ */
+function isSquareAttacked(board, row, col, byWhite) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const piece = board[r][c];
+            if (!piece) continue;
+            
+            const isWhitePiece = piece === piece.toUpperCase();
+            if (isWhitePiece !== byWhite) continue;
+            
+            // Obtient les coups valides pour cette pièce
+            const moves = getValidMoves(board, r, c, piece, null);
+            if (moves.some(move => move.row === row && move.col === col)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Vérifie si le roi d'une couleur est en échec
+ */
+function isKingInCheck(board, isWhiteKing) {
+    // Trouve la position du roi
+    let kingRow = -1, kingCol = -1;
+    const kingPiece = isWhiteKing ? 'K' : 'k';
+    
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c] === kingPiece) {
+                kingRow = r;
+                kingCol = c;
+                break;
+            }
+        }
+        if (kingRow !== -1) break;
+    }
+    
+    if (kingRow === -1) return false; // Roi non trouvé (ne devrait pas arriver)
+    
+    // Vérifie si la case du roi est attaquée par l'adversaire
+    return isSquareAttacked(board, kingRow, kingCol, !isWhiteKing);
+}
+
+/**
+ * Vérifie s'il existe au moins un coup légal pour un joueur
+ */
+function hasLegalMoves(board, player, gameCtx) {
+    const isWhite = player === 'white';
+    
+    for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+            const piece = board[row][col];
+            if (!piece) continue;
+            
+            const isWhitePiece = piece === piece.toUpperCase();
+            if (isWhitePiece !== isWhite) continue;
+            
+            const moves = getValidMoves(board, row, col, piece, gameCtx);
+            
+            for (const move of moves) {
+                // Simule le coup
+                const originalPiece = board[move.row][move.col];
+                board[move.row][move.col] = piece;
+                board[row][col] = null;
+                
+                // Vérifie si le roi est toujours en échec après ce coup
+                const kingInCheck = isKingInCheck(board, isWhitePiece);
+                
+                // Défait le coup
+                board[row][col] = piece;
+                board[move.row][move.col] = originalPiece;
+                
+                // S'il existe un coup qui ne met pas le roi en échec, c'est un coup légal
+                if (!kingInCheck) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+/**
+ * Détecte l'échec et mat
+ */
+function isCheckmate(board, player, gameCtx) {
+    const isWhite = player === 'white';
+    
+    // Le roi doit être en échec
+    if (!isKingInCheck(board, isWhite)) {
+        return false;
+    }
+    
+    // Et il ne doit pas y avoir de coups légaux
+    return !hasLegalMoves(board, player, gameCtx);
+}
+
+/**
  * Crée une notation simple du coup
  */
 function createMoveNotation(fromRow, fromCol, toRow, toCol, piece, capturedPiece) {
@@ -613,6 +715,28 @@ io.on('connection', (socket) => {
             wasPromotion = true;
         }
 
+        // Détection de la capture du roi
+        if (capturedPiece === 'K' || capturedPiece === 'k') {
+            const winner = isWhitePiece ? 'white' : 'black';
+            const loser = isWhitePiece ? 'black' : 'white';
+            const winnerFR = winner === 'white' ? 'blancs' : 'noirs';
+            const loserFR = loser === 'white' ? 'blancs' : 'noirs';
+            const eloWinner = getPlayerELO(game.players[winner]);
+            const eloLoser = getPlayerELO(game.players[loser]);
+            const { newEloWinner, newEloLoser } = calculateNewELO(eloWinner, eloLoser);
+            playerELO.set(game.players[winner], newEloWinner);
+            playerELO.set(game.players[loser], newEloLoser);
+            game.status = 'ended';
+            io.to(game.gameId).emit('gameEnd', {
+                status: 'checkmate',
+                winner,
+                message: `Les ${winnerFR} ont capturé le roi. Les ${winnerFR} ont gagné !`,
+                winnerELO: newEloWinner,
+                loserELO: newEloLoser
+            });
+            return;
+        }
+
         // Mise à jour de la cible en passant
         if (piece.toLowerCase() === 'p' && Math.abs(toRow - fromRow) === 2) {
             const epRow = isWhitePiece ? toRow + 1 : toRow - 1;
@@ -668,6 +792,37 @@ io.on('connection', (socket) => {
 
         console.log(`[move] ${socket.id} (${previousPlayer}) joue : ${moveNotation}`);
 
+        // Crée le contexte pour les vérifications d'échec
+        const gameCtx = {
+            enPassantTarget: game.enPassantTarget,
+            castlingRights: game.castlingRights
+        };
+
+        // Vérifie l'échec et mat
+        if (isCheckmate(game.board, game.currentPlayer, gameCtx)) {
+            const winner = game.currentPlayer === 'white' ? 'black' : 'white';
+            const loser = game.currentPlayer;
+            const winnerFR = winner === 'white' ? 'blancs' : 'noirs';
+            const loserFR = loser === 'white' ? 'blancs' : 'noirs';
+            const eloWinner = getPlayerELO(game.players[winner]);
+            const eloLoser = getPlayerELO(game.players[loser]);
+            const { newEloWinner, newEloLoser } = calculateNewELO(eloWinner, eloLoser);
+            playerELO.set(game.players[winner], newEloWinner);
+            playerELO.set(game.players[loser], newEloLoser);
+            game.status = 'ended';
+            io.to(game.gameId).emit('gameEnd', {
+                status: 'checkmate',
+                winner,
+                message: `Échec et mat ! Les ${winnerFR} ont gagné !`,
+                winnerELO: newEloWinner,
+                loserELO: newEloLoser
+            });
+            return;
+        }
+
+        // Vérifie si c'est un échec (mais pas echec et mat)
+        const isCheck = isKingInCheck(game.board, game.currentPlayer === 'white');
+
         // Envoie la mise à jour aux deux joueurs dans la room (timers inclus)
         io.to(game.gameId).emit('moveUpdate', {
             board: game.board,
@@ -677,7 +832,8 @@ io.on('connection', (socket) => {
             timers: game.timers,
             enPassantTarget: game.enPassantTarget,
             castlingRights: game.castlingRights,
-            promotion: wasPromotion
+            promotion: wasPromotion,
+            isCheck: isCheck
         });
     });
 
