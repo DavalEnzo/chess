@@ -243,6 +243,11 @@ socket.on('moveUpdate', (data) => {
     gameState.history = data.history;
     gameState.selectedSquare = null;
     gameState.possibleMoves = [];
+    // Synchronise les timers depuis le serveur (bug 3)
+    if (data.timers && !gameState.isLocalGame) {
+        gameTimers.white = data.timers.white;
+        gameTimers.black = data.timers.black;
+    }
 
     // Joue le son du coup de l'adversaire
     if (data.moveNotation.includes('x')) {
@@ -1129,14 +1134,14 @@ function stopTimer() {
 
 function endGameByTime(loser) {
     stopTimer();
+    // En mode local uniquement (le serveur gère le timeout en ligne)
+    if (!gameState.isLocalGame) return;
     const winner = loser === 'white' ? 'black' : 'white';
     const loserColor = loser === 'white' ? 'blancs' : 'noirs';
     const winnerColor = winner === 'white' ? 'blancs' : 'noirs';
-    socket.emit('gameEnd', {
-        status: 'timeout',
-        winner,
-        message: `Le temps des ${loserColor} s'est écoulé. Les ${winnerColor} ont gagné !`
-    });
+    document.getElementById('gameEndTitle').innerHTML = winner === gameState.color ? '🎉 Vous avez gagné ! 🎉' : '😢 Vous avez perdu';
+    document.getElementById('gameEndMessage').textContent = `Le temps des ${loserColor} s'est écoulé. Les ${winnerColor} ont gagné !`;
+    showScreen('gameEndScreen');
 }
 
 // ===========================
@@ -1300,24 +1305,22 @@ document.getElementById('playAgainBtn').addEventListener('click', () => {
  * Bouton : Retour à l'accueil (fin de partie)
  */
 document.getElementById('backToHomeBtn').addEventListener('click', () => {
+    stopTimer();
+    gameState.gameId = null;
+    gameState.color = null;
+    gameState.board = JSON.parse(JSON.stringify(INITIAL_BOARD));
+    gameState.currentPlayer = 'white';
+    gameState.selectedSquare = null;
+    gameState.possibleMoves = [];
+    gameState.history = [];
+    gameState.status = 'connecting';
+    gameState.isLocalGame = false;
+    gameState.isPrivateRoom = false;
+    gameState.privateRoomCode = null;
+    gameState.yourELO = 0;
+    gameState.opponentELO = 0;
+    gameState.opponentPseudo = 'Adversaire';
     showScreen('matchingScreen');
-    gameState = {
-        board: createBoard(),
-        selectedSquare: null,
-        validMoves: [],
-        gameId: null,
-        playerId: null,
-        color: null,
-        turn: 'white',
-        whiteTime: 600,
-        blackTime: 600,
-        timerInterval: null,
-        isGameActive: false,
-        isPrivateRoom: false,
-        privateRoomCode: null,
-        playerPseudo: null,
-        opponentPseudo: 'Adversaire'
-    };
 });
 
 // ===========================
