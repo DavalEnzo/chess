@@ -44,7 +44,7 @@ jobs:
             docker rm -f chess || true
             docker build -t chess-game .
             docker run -d \
-              -p 3000:3000 \
+              -p 5000:3000 \
               --name chess \
               --restart unless-stopped \
               chess-game
